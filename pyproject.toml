@@ -1,0 +1,14 @@
+[tool.poetry]
+name = "guit-tunix"
+version = "0.1.0"
+description = ""
+authors = ["Damien ULRICH <s4mdf0o1@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
