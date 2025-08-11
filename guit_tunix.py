@@ -172,7 +172,7 @@ def processing_thread():
 # ---------- affichage ----------
 def main():
     global stop_flag
-    print("Accordeur YIN — barre colorée (bleu => rouge). Ctrl+C pour quitter.")
+    print("Guit Tunix - Accordeur YIN — Ctrl+C pour quitter.")
     t = threading.Thread(target=processing_thread, daemon=True)
     t.start()
     with sd.InputStream(channels=1, samplerate=FS, blocksize=BLOCKSIZE, callback=audio_callback):
