@@ -15,6 +15,8 @@ modèle détecté :
 Bus 002 Device 019: ID 0d8c:0008 C-Media Electronics, Inc. C-Media USB Audio Device
 ```
 
+Fonctionne au micro à la voix (avec quelques difficultés, mais quand même X-) 
+
 ## Install
 Dans un venv :
 
