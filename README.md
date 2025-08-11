@@ -8,5 +8,10 @@ utilise la méthode YIN : algorythme de traitement du signal, afin de muter les 
 
 Utilisé avec le cable Jack->USB sur la guitare Gibson.
 
-dépendances python pip : numpy sounddevice
+## Install
+Dans un venv :
+
+```shell
+pip install  -r requirements.txt
+```
 
