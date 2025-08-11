@@ -6,7 +6,14 @@ Développé avec l'aide de ChatGPT
 
 utilise la méthode YIN : algorythme de traitement du signal, afin de muter les harmoniques et augmenter la fréquence principale.
 
-Utilisé avec le cable Jack->USB sur la guitare Gibson.
+## Hardware
+
+Utilisé avec un câble Jack->USB sur Gibson BluesHawk.
+
+modèle détecté :
+```
+Bus 002 Device 019: ID 0d8c:0008 C-Media Electronics, Inc. C-Media USB Audio Device
+```
 
 ## Install
 Dans un venv :
