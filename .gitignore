@@ -1,3 +1,7 @@
 .*.swp
 poetry.lock
 tunix.py
+.vim/
+.venv/
+__pycache__/
+

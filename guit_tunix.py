@@ -1,199 +1,164 @@
 #!/usr/bin/env python3
-"""
-Accordeur avec YIN + barre colorée (bleu => rouge) + fréquence mesurée
-"""
+import gi
+gi.require_version("Gtk", "4.0")
+from gi.repository import Gtk, GObject, GLib#, Gdk
 
-import numpy as np
-import sounddevice as sd
+# import sounddevice as sd
+# import subprocess
+# import pyaudio
 import threading
-import time
-from math import isfinite
 
-# ---------- paramètres ----------
-FS = 44100
-WINDOW_SIZE = 8192
-BLOCKSIZE = 1024
-HOP_TIME = 0.04
-RMS_THRESHOLD = 1e-4
-SMOOTH_ALPHA = 0.6
-BAR_SPAN = 10.0
-BAR_WIDTH = 56
-YIN_THRESHOLD = 0.1  # plus petit = plus précis mais + sensible au bruit
+from pulse_selector import PulseSelector
+from tuner import Tuner
+from audio_stream import AudioStream
 
-TARGET_FREQS = {
-    'E2': 82.41,
-    'A2': 110.00,
-    'D3': 146.83,
-    'G3': 196.00,
-    'B3': 246.94,
-    'E4': 329.63
-}
+class GuitTunixWin(Tuner, Gtk.ApplicationWindow):
+    device = GObject.Property(type=str, default="")
 
-RESET = '\033[0m'
+    def __init__(self, app, device=""):
+        super().__init__(application=app, device="")
+        self.name = self.__class__.__name__
+        self.set_title("Guit Tunix")
+        self.set_default_size(400,100)
 
-# ---------- buffers ----------
-buffer = np.zeros(WINDOW_SIZE, dtype='float32')
-buf_lock = threading.Lock()
-stop_flag = False
-detected_freq = 0.0
-prev_freq = 0.0
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        vbox.set_halign(Gtk.Align.CENTER)
+        vbox.set_valign(Gtk.Align.CENTER)
+        self.set_child(vbox)
 
-# ---------- outils ----------
-def get_closest_string(freq):
-    return min(TARGET_FREQS.items(), key=lambda x: abs(x[1] - freq))
+        self.pulse_sel = PulseSelector(search="KATANA")
+        self.pulse_sel.connect("notify::device", self.on_device_changed)
+        vbox.append(self.pulse_sel)
 
-def lerp(a, b, t):
-    return int(round(a + (b - a) * t))
+        self.device = self.pulse_sel.device
 
-def rgb_for_diff(diff_hz, span):
-    t = max(-1.0, min(1.0, diff_hz / span))
-    if t <= -0.5:
-        s = (t + 1.0) / 0.5
-        r = lerp(0, 0, s)
-        g = lerp(0, 255, s)
-        b = lerp(255, 255, s)
-    elif t <= 0.0:
-        s = (t + 0.5) / 0.5
-        r = lerp(0, 0, s)
-        g = lerp(255, 255, s)
-        b = lerp(255, 0, s)
-    elif t <= 0.5:
-        s = (t - 0.0) / 0.5
-        r = lerp(0, 255, s)
-        g = lerp(255, 255, s)
-        b = lerp(0, 0, s)
-    else:
-        s = (t - 0.5) / 0.5
-        r = lerp(255, 255, s)
-        g = lerp(255, 0, s)
-        b = lerp(0, 0, s)
-    return r, g, b
+        self.note_label = Gtk.Label()
+        self.note_label.set_markup("<span font='24'>E-A-D-G-B-E</span>")
+        self.note_label.set_xalign(0.5)
+        vbox.append(self.note_label)
 
-def ansi_truecolor(r, g, b):
-    return f"\033[38;2;{r};{g};{b}m"
+        self.bar_label = Gtk.Label()
+        self.bar_label.set_use_markup(True)
+        self.bar_label.set_xalign(0.5)
+        self.bar_label.set_selectable(True)
+        self.bar_label.set_margin_bottom(40)
+        vbox.append(self.bar_label)
 
-def freq_to_bar_colored(current, target, width=BAR_WIDTH, span=BAR_SPAN):
-    low = target - span / 2
-    high = target + span / 2
-    rng = high - low
-    center = width // 2
-    chars = []
-    for i in range(width):
-        pos_freq = low + (i / (width - 1)) * rng
-        diff_pos = pos_freq - target
-        r, g, b = rgb_for_diff(diff_pos, span/2)
-        col = ansi_truecolor(r, g, b)
-        ch = '+' if i == center else '-'
-        chars.append((col, ch))
-    cur_pos = int(round((current - low) / rng * (width - 1)))
-    cur_pos = max(0, min(width - 1, cur_pos))
-    cur_diff = current - target
-    cr, cg, cb = rgb_for_diff(cur_diff, span/2)
-    cursor_col = ansi_truecolor(cr, cg, cb)
-    cursor_sym = '│ ' if cur_pos == center else '⭢ '
-    chars[cur_pos] = (cursor_col, cursor_sym)
-    return ''.join(f"{col}{ch}{RESET}" for col, ch in chars)
+        btn_close = Gtk.Button(label="Close")
+        btn_close.set_hexpand(False)
+        btn_close.connect("clicked", lambda b: self.close())
+        vbox.append(btn_close)
 
-# ---------- implémentation de YIN ----------
-def yin_pitch(signal, fs, fmin=60, fmax=1000, threshold=YIN_THRESHOLD):
-    N = len(signal)
-    max_tau = int(fs / fmin)
-    min_tau = int(fs / fmax)
+        if self.device:
+            # print(self.name, device)
+            self.stream = AudioStream(device=self.device, callback=self.audio_callback)
+        self.connect("map", self.on_map)
+        threading.Thread(target=self.processing_thread, args=(self,), daemon=True).start()
 
-    # étape 1 : différence cumulée
-    diff = np.zeros(max_tau)
-    for tau in range(1, max_tau):
-        diff[tau] = np.sum((signal[:N - tau] - signal[tau:N]) ** 2)
+    def on_map(self, widget):
+        if self.stream:
+            self.stream.start()
 
-    # étape 2 : normalisation cumulative
-    cum_sum = np.cumsum(diff[1:])
-    cmndf = np.ones(max_tau)
-    cmndf[1:] = diff[1:] * np.arange(1, max_tau) / (cum_sum + 1e-8)
+    def on_device_changed(self, pulse_sel, pspec):
+        self.device = self.pulse_sel.device
+        self.stream.set_device(self.device)
+        print(self.name, self.pulse_sel.device)
+        with self.buf_lock:
+            self.buffer[:] = 0.0
+        self.noise_rms = 1e-8
+        # self.device = pulse_sel.device
 
-    # étape 3 : recherche du premier minimum sous le seuil
-    tau = min_tau
-    while tau < max_tau:
-        if cmndf[tau] < threshold:
-            while tau + 1 < max_tau and cmndf[tau + 1] < cmndf[tau]:
-                tau += 1
-            break
-        tau += 1
-    else:
-        return 0.0
-
-    # étape 4 : interpolation parabolique
-    if tau > 1 and tau < max_tau - 1:
-        s0, s1, s2 = cmndf[tau - 1], cmndf[tau], cmndf[tau + 1]
-        denom = (s0 + s2 - 2 * s1)
-        if denom != 0:
-            tau += 0.5 * (s0 - s2) / denom
-
-    return fs / tau
-
-# ---------- callback audio ----------
-def audio_callback(indata, frames, time_info, status):
-    global buffer
-    if status:
-        print(status, flush=True)
-    mono = indata[:, 0].astype('float32')
-    with buf_lock:
-        f = len(mono)
-        if f >= WINDOW_SIZE:
-            buffer[:] = mono[-WINDOW_SIZE:]
+    def rgb_for_diff(self, diff_hz, span):
+        t = max(-1.0, min(1.0, diff_hz / span))
+        if t <= -0.5:
+            s = (t + 1.0) / 0.5
+            r, g, b = 0, self.lerp(0, 255, s), 255
+        elif t <= 0.0:
+            s = (t + 0.5) / 0.5
+            r, g, b = 0, 255, self.lerp(255, 0, s)
+        elif t <= 0.5:
+            s = (t - 0.0) / 0.5
+            r, g, b = self.lerp(0, 255, s), 255, 0
         else:
-            buffer[:-f] = buffer[f:]
-            buffer[-f:] = mono
+            s = (t - 0.5) / 0.5
+            r, g, b = 255, self.lerp(255, 0, s), 0
+        return r, g, b
 
-# ---------- thread de traitement ----------
-def processing_thread():
-    global detected_freq, prev_freq, stop_flag
-    while not stop_flag:
-        time.sleep(HOP_TIME)
-        with buf_lock:
-            x = buffer.copy()
-        if np.max(np.abs(x)) < 1e-8:
-            continue
-        x -= np.mean(x)
-        rms = np.sqrt(np.mean(x * x))
-        if rms < RMS_THRESHOLD:
-            continue
-        w = np.hanning(len(x))
-        xw = x * w
-        freq = yin_pitch(xw, FS)
-        if freq <= 0 or not isfinite(freq):
-            continue
-        if prev_freq == 0.0:
-            out = freq
-        else:
-            out = SMOOTH_ALPHA * freq + (1.0 - SMOOTH_ALPHA) * prev_freq
-        prev_freq = out
-        detected_freq = out
+    def ansi_truecolor(self, r,g,b): return f"<span foreground='#{r:02x}{g:02x}{b:02x}'>"
 
-# ---------- affichage ----------
-def main():
-    global stop_flag
-    print("Guit Tunix - Accordeur YIN — Ctrl+C pour quitter.")
-    t = threading.Thread(target=processing_thread, daemon=True)
-    t.start()
-    with sd.InputStream(channels=1, samplerate=FS, blocksize=BLOCKSIZE, callback=audio_callback):
-        try:
-            while True:
-                f = detected_freq
-                if f <= 0:
-                    disp = "--"
-                    note = "--"
-                    bar = " " * (BAR_WIDTH * 2)
-                else:
-                    note, target = get_closest_string(f)
-                    disp = f"{f:6.2f}"
-                    bar = freq_to_bar_colored(f, target, width=BAR_WIDTH, span=BAR_SPAN)
-                print(f"{note}: {disp} Hz {bar}   ", end='\r')
-                time.sleep(HOP_TIME)
-        except KeyboardInterrupt:
-            stop_flag = True
-            t.join()
-            print("\nFin.")
+    def freq_to_bar_pango(self, current, target):
+        width=self.cfg['BAR_WIDTH']
+        span=self.cfg['BAR_SPAN']
+        low, high = target - span/2, target + span/2
+        rng, center = high - low, width//2
+        chars = []
+        for i in range(width):
+            pos_freq = low + (i/(width-1))*rng
+            diff_pos = pos_freq - target
+            r,g,b = self.rgb_for_diff(diff_pos, span/2)
+            col = self.ansi_truecolor(r,g,b)
+            ch = '◎' if i==center else '▢' #'-'
+            chars.append(f"{col}{ch}</span>")
+        cur_pos = int(round((current - low) / rng * (width - 1)))
+        cur_pos = max(0, min(width - 1, cur_pos))
+        cur_diff = current - target
+        r,g,b = self.rgb_for_diff(cur_diff, span/2)
+        cursor_col = self.ansi_truecolor(r,g,b)
+        cursor_sym = '◉' if cur_pos==center else '▶' if cur_pos < center else '◀' # '⭠'
+        chars[cur_pos] = f"{cursor_col}{cursor_sym}</span>"
+        return ''.join(chars)
+    
+    def update_display(self, note, freq, offset, bar_markup):
+        r,g,b = self.rgb_for_diff(offset, self.cfg['BAR_SPAN']/2)
+        color = f"#{r:02x}{g:02x}{b:02x}"
+        self.note_label.set_markup(f"<span foreground='{color}' font='24'>{note}</span>")
+        self.bar_label.set_markup(bar_markup)
+
+    # def on_open_tuner(self, button):
+    #     dialog = TunerDialog(self.get_application(), self)
+    #     response = dialog.run_and_destroy()
+
+    #     if response == Gtk.ResponseType.OK:
+    #         print("Tuner OK")
+
+    # def open_tuner(self):#, btn):
+    #     # self.set_sensitive(False)
+    #     # global stop_flag; stop_flag=False
+    #     self.tuner=TunerDialog(self, btn.get_root())
+    #     self.tuner.connect("response", lambda d,r: self.stop_tuner(d))
+    #     self.tuner.present()
+    #     threading.Thread(target=self.processing_thread, args=(self,), daemon=True).start()
+        # device_index = self.tuner.find_katana_device()
+        # self.stream = sd.InputStream(
+        #         device=self.device, 
+        #         channels=1, 
+        #         samplerate=FS, 
+        #         blocksize=BLOCKSIZE, 
+        #         callback=self.audio_callback
+        #     )
+        # self.stream.start()
+
+    # def stop_tuner(self, dialog):
+    #     # global stop_flag; stop_flag=True
+    #     self.stream.stop(); self.stream.close()
+    #     self.close()
+        # self.set_sensitive(True)
+
+    # def show_selector(self, *_):
+    #     def set_device(nom):
+    #         self.device = nom
+    #         print(f"{self.device=}")
+    #         self.open_tuner()
+    #     AudioSelector(parent=self, callback=set_device)#lambda nom: setattr(self, "device", nom))
+
 
 if __name__ == "__main__":
-    main()
+    app = Gtk.Application(application_id="org.example.GuitTunix")
+
+    def on_activate(app):
+        win = GuitTunixWin(app)
+        win.present()
+
+    app.connect("activate", on_activate)
+    app.run()
 
