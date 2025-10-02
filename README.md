@@ -1,34 +1,30 @@
 # Guit Tunix
 
-Simple Python guitar tuner
+Simple Python3 Gtk4 guitar tuner
 
-Développé avec l'aide de ChatGPT
+With PulseAudio source selector (Mic/USB/...)
 
-utilise la méthode YIN : algorythme de traitement du signal, afin de muter les harmoniques et augmenter la fréquence principale.
+Noise reduction, so you can tune Classic Guitars with a microphone
 
-## Hardware
+## Requirements
 
-Utilisé avec un câble Jack->USB sur Gibson BluesHawk.
+> gi threading numpy ruamel.yaml pulsectl
 
-modèle détecté :
+## Demo
+
+![Animation du déplacement du curseur et sélection de la note pour accorder la guitare](./snapshot/guit_tunix.gif)
+
+## Configuration
+
+[config.yaml](./config.yaml) :  add here wanted Notes: Frequencies
+```yaml
+TARGET_FREQS:
+    E₂: 82.41
+    A₂: 110.00
+    D₃: 146.83
+    G₃: 196.00
+    B₃: 246.94
+    E₄: 329.63
+
 ```
-Bus 002 Device 019: ID 0d8c:0008 C-Media Electronics, Inc. C-Media USB Audio Device
-```
-
-Fonctionne au micro à la voix (avec quelques difficultés, mais quand même X-) 
-
-## Install
-Dans un venv :
-
-```bash
-pip install  -r requirements.txt
-```
-
-## Screenshot Demo
-
-![Animation du déplacement du curseur et sélection de la note pour accorder la guitare](./snapshot/demo.gif)
-
-## Limitations
-
-Pour l'heure, ne permet d'accorder la guitare qu'en standard E-A-D-G-B-E
 

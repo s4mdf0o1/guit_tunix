@@ -1,8 +1,6 @@
 import gi
 gi.require_version("Gtk", "4.0")
 from gi.repository import Gtk, GObject
-import subprocess
-import pyaudio
 
 class PulseSelector(Gtk.DropDown):
     device = GObject.Property(type=str, default="")

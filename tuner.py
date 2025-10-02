@@ -1,6 +1,5 @@
 from math import isfinite
 import numpy as np
-import pyaudio
 
 from gi.repository import GLib
 
