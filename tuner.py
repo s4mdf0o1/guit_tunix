@@ -23,6 +23,7 @@ class Tuner:
         self.noise_rms = 1e-8
 
     def get_closest_string(self, freq):
+        print(f"{freq=}")
         return min(self.cfg['TARGET_FREQS'].items(), key=lambda x: abs(x[1] - freq))
 
     def lerp(self, a, b, t): return int(round(a + (b - a) * t))
@@ -55,10 +56,6 @@ class Tuner:
         return fs/tau
 
     def audio_callback(self, indata, frames, time_info=None, status=None):
-        # global buffer
-        # if indata.ndim == 2:
-            # indata = indata[:,0]  # prendre le premier canal
-        # mono = indata.astype('float32')
         mono = indata[:,0].astype('float32') / 32768.0
         with self.buf_lock:
             f = len(mono)
@@ -68,7 +65,6 @@ class Tuner:
                 self.buffer[-f:] = mono
 
     def processing_thread(self, dialog=None):
-        # global detected_freq, prev_freq, stop_flag
         while not self.stop_flag:
 
             time.sleep(self.cfg['HOP_TIME'])
@@ -110,7 +106,6 @@ class Tuner:
                     else self.cfg['SMOOTH_ALPHA']*freq \
                         +(1.0-self.cfg['SMOOTH_ALPHA'])*self.prev_freq
             self.prev_freq = out; self.detected_freq = out
-            # if dialog:
             note,target = self.get_closest_string(out)
             offset = out - target
             bar = self.freq_to_bar_pango(out, target)
