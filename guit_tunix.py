@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
 import gi
 gi.require_version("Gtk", "4.0")
-from gi.repository import Gtk, GObject, GLib#, Gdk
+from gi.repository import Gtk, GObject, GLib
 
-# import sounddevice as sd
-# import subprocess
-# import pyaudio
 import threading
 
 from pulse_selector import PulseSelector
@@ -62,11 +59,10 @@ class GuitTunixWin(Tuner, Gtk.ApplicationWindow):
     def on_device_changed(self, pulse_sel, pspec):
         self.device = self.pulse_sel.device
         self.stream.set_device(self.device)
-        print(self.name, self.pulse_sel.device)
+        # print(self.name, self.pulse_sel.device)
         with self.buf_lock:
             self.buffer[:] = 0.0
         self.noise_rms = 1e-8
-        # self.device = pulse_sel.device
 
     def rgb_for_diff(self, diff_hz, span):
         t = max(-1.0, min(1.0, diff_hz / span))
@@ -97,14 +93,14 @@ class GuitTunixWin(Tuner, Gtk.ApplicationWindow):
             diff_pos = pos_freq - target
             r,g,b = self.rgb_for_diff(diff_pos, span/2)
             col = self.ansi_truecolor(r,g,b)
-            ch = '◎' if i==center else '▢' #'-'
+            ch = '◎' if i==center else '▢'
             chars.append(f"{col}{ch}</span>")
         cur_pos = int(round((current - low) / rng * (width - 1)))
         cur_pos = max(0, min(width - 1, cur_pos))
         cur_diff = current - target
         r,g,b = self.rgb_for_diff(cur_diff, span/2)
         cursor_col = self.ansi_truecolor(r,g,b)
-        cursor_sym = '◉' if cur_pos==center else '▶' if cur_pos < center else '◀' # '⭠'
+        cursor_sym = '◉' if cur_pos==center else '▶' if cur_pos < center else '◀'
         chars[cur_pos] = f"{cursor_col}{cursor_sym}</span>"
         return ''.join(chars)
     
@@ -113,44 +109,6 @@ class GuitTunixWin(Tuner, Gtk.ApplicationWindow):
         color = f"#{r:02x}{g:02x}{b:02x}"
         self.note_label.set_markup(f"<span foreground='{color}' font='24'>{note}</span>")
         self.bar_label.set_markup(bar_markup)
-
-    # def on_open_tuner(self, button):
-    #     dialog = TunerDialog(self.get_application(), self)
-    #     response = dialog.run_and_destroy()
-
-    #     if response == Gtk.ResponseType.OK:
-    #         print("Tuner OK")
-
-    # def open_tuner(self):#, btn):
-    #     # self.set_sensitive(False)
-    #     # global stop_flag; stop_flag=False
-    #     self.tuner=TunerDialog(self, btn.get_root())
-    #     self.tuner.connect("response", lambda d,r: self.stop_tuner(d))
-    #     self.tuner.present()
-    #     threading.Thread(target=self.processing_thread, args=(self,), daemon=True).start()
-        # device_index = self.tuner.find_katana_device()
-        # self.stream = sd.InputStream(
-        #         device=self.device, 
-        #         channels=1, 
-        #         samplerate=FS, 
-        #         blocksize=BLOCKSIZE, 
-        #         callback=self.audio_callback
-        #     )
-        # self.stream.start()
-
-    # def stop_tuner(self, dialog):
-    #     # global stop_flag; stop_flag=True
-    #     self.stream.stop(); self.stream.close()
-    #     self.close()
-        # self.set_sensitive(True)
-
-    # def show_selector(self, *_):
-    #     def set_device(nom):
-    #         self.device = nom
-    #         print(f"{self.device=}")
-    #         self.open_tuner()
-    #     AudioSelector(parent=self, callback=set_device)#lambda nom: setattr(self, "device", nom))
-
 
 if __name__ == "__main__":
     app = Gtk.Application(application_id="org.example.GuitTunix")

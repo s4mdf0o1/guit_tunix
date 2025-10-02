@@ -12,7 +12,6 @@ class AudioStream:
         self.name = self.__class__.__name__
         Gst.init(None)
         self.device = device
-        # print(self.name, device)
         if callback:
             self.callback = callback
         self.pipeline = None
@@ -21,7 +20,6 @@ class AudioStream:
         self._build_pipeline()
 
     def _build_pipeline(self):
-        """Crée ou recrée le pipeline pour le device actuel."""
         if self.pipeline:
             self.pipeline.set_state(Gst.State.NULL)
 
@@ -38,14 +36,12 @@ class AudioStream:
         self.pipeline.set_state(Gst.State.PLAYING)
 
     def set_device(self, device):
-        """Change le device PulseAudio à chaud."""
         with self._lock:
             self.device = device
             self._build_pipeline()
 
     def audio_callback(self, data: np.ndarray, frames: int, time_info=None, status=None):
-        """Callback identique à sounddevice."""
-        print("Bloc reçu:", data.shape, "frames")
+        print("received:", data.shape, "frames")
 
     def on_new_sample(self, sink):
         sample = sink.emit("pull-sample")
@@ -61,37 +57,20 @@ class AudioStream:
             else:
                 self.audio_callback(arr, arr.size)
 
-            # self.audio_callback(arr, arr.shape[0])
             buf.unmap(map_info)
         return Gst.FlowReturn.OK
 
-        # sample = sink.emit("pull-sample")
-        # buf = sample.get_buffer()
-        # success, map_info = buf.map(Gst.MapFlags.READ)
-        # if success:
-        #     arr = np.frombuffer(map_info.data, dtype=np.int16)
-        #     if arr.size >= BLOCKSIZE:
-        #         arr = arr[:BLOCKSIZE]
-        #     if self.callback:
-        #         self.callback(arr, arr.size)
-        #     else:
-        #         self.audio_callback(arr, arr.size)
-        #     buf.unmap(map_info)
-        # return Gst.FlowReturn.OK
-
     def start(self):
-        """Démarre le pipeline."""
         with self._lock:
             if self.pipeline:
                 self.pipeline.set_state(Gst.State.PLAYING)
 
     def stop(self):
-        """Stoppe le pipeline."""
         with self._lock:
             if self.pipeline:
                 self.pipeline.set_state(Gst.State.NULL)
 
-
+# ----------Test Part -----------------
 if __name__ == "__main__":
     loop = GLib.MainLoop()
     stream = AudioStream(device="alsa_input.usb-BOSS_KATANA-01.HiFi__Line4__source")

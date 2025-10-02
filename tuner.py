@@ -10,24 +10,13 @@ import time
 from ruamel.yaml import YAML
 yaml = YAML(typ="safe")
 
-FS = 44100
-WINDOW_SIZE = 8192
-# BLOCKSIZE = 1024
-HOP_TIME = 0.04
-RMS_THRESHOLD = 1e-4
-SMOOTH_ALPHA = 0.6 
-YIN_THRESHOLD = 0.1
-
-BAR_SPAN = 10.0
-BAR_WIDTH = 24
-
 class Tuner:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.name = self.__class__.__name__
         with open("target_freqs.yaml", "r") as f:
             self.cfg = yaml.load(f) 
-        self.buffer = np.zeros(self.cfg['WINDOW_SIZE'], dtype='float32')
+        self.buffer = np.zeros(self.cfg['WIN_SIZE'], dtype='float32')
         self.buf_lock = threading.Lock()
         self.stop_flag = False
         self.detected_freq = 0.0
@@ -74,7 +63,7 @@ class Tuner:
         mono = indata[:,0].astype('float32') / 32768.0
         with self.buf_lock:
             f = len(mono)
-            if f >= self.cfg['WINDOW_SIZE']: self.buffer[:] = mono[-self.cfg['WINDOW_SIZE']:]
+            if f >= self.cfg['WIN_SIZE']: self.buffer[:] = mono[-self.cfg['WIN_SIZE']:]
             else:
                 self.buffer[:-f] = self.buffer[f:]
                 self.buffer[-f:] = mono
@@ -89,32 +78,38 @@ class Tuner:
             x -= np.mean(x)
             rms = np.sqrt(np.mean(x*x))
 
-            # self.noise_rms = 0.99 * self.noise_rms + 0.01 * rms  # lissage
-            # adaptive_threshold = max(self.cfg['RMS_THRESHOLD'], 3 * self.noise_rms)
             if rms < self.cfg['RMS_ACTIVE_THRESHOLD']:
-                self.noise_rms = self.cfg['ALPHA'] * self.noise_rms + (1.0 - self.cfg['ALPHA']) * rms
+                self.noise_rms = self.cfg['ALPHA'] * self.noise_rms \
+                        + (1.0 - self.cfg['ALPHA']) * rms
 
-            # adaptive_threshold = max(self.cfg['RMS_THRESHOLD'], 3 * self.noise_rms)
-            # adaptive_threshold = max(self.cfg['RMS_THRESHOLD'], 3 * self.noise_rms, self.cfg['RMS_MIN'])
-            adaptive_threshold = np.clip(3 * self.noise_rms, self.cfg['RMS_MIN'], self.cfg['RMS_MAX'])
+            adaptive_threshold = np.clip(
+                    3 * self.noise_rms, 
+                    self.cfg['RMS_MIN'], 
+                    self.cfg['RMS_MAX']
+                    )
 
 
-            # print(f"{rms=} {self.cfg['RMS_THRESHOLD']}")
-            print(f"{self.noise_rms=} {rms=} {adaptive_threshold}")
-            # if rms < self.cfg['RMS_THRESHOLD']:
+            # print(f"{self.noise_rms=} {rms=} {adaptive_threshold}")
             if rms < adaptive_threshold:
-                # if dialog:
-                GLib.idle_add(self.update_display, "--", 0.0, 0.0, "▢" * self.cfg['BAR_WIDTH'])
+                GLib.idle_add(
+                        self.update_display, 
+                        "--", 0.0, 0.0, 
+                        "▢" * self.cfg['BAR_WIDTH']
+                        )
 
                 continue
             xw = x * np.hanning(len(x))
             freq = self.yin_pitch(xw, self.cfg['FS'])
             if freq <= 0 or not isfinite(freq):
-                # if dialog:
-                GLib.idle_add(self.update_display, "--", 0.0, 0.0, "▢" * self.cfg['BAR_WIDTH'])
+                GLib.idle_add(self.update_display, 
+                            "--", 0.0, 0.0, 
+                            "▢" * self.cfg['BAR_WIDTH']
+                            )
 
                 continue
-            out = freq if self.prev_freq==0.0 else self.cfg['SMOOTH_ALPHA']*freq+(1.0-self.cfg['SMOOTH_ALPHA'])*self.prev_freq
+            out = freq if self.prev_freq==0.0 \
+                    else self.cfg['SMOOTH_ALPHA']*freq \
+                        +(1.0-self.cfg['SMOOTH_ALPHA'])*self.prev_freq
             self.prev_freq = out; self.detected_freq = out
             # if dialog:
             note,target = self.get_closest_string(out)

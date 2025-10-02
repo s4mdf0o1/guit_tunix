@@ -58,7 +58,7 @@ class PulseSelector(Gtk.DropDown):
         sources = pulse.source_list()
         return [(s.name, s.description) for s in sources if ".monitor" not in s.name]
 
-### ---------------------------------------
+### ----------Test part-----------------------------
 
 class MainWindow(Gtk.ApplicationWindow):
     source = GObject.Property(type=str, default="")
