@@ -23,7 +23,7 @@ class GuitTunixWin(Tuner, Gtk.ApplicationWindow):
         vbox.set_valign(Gtk.Align.CENTER)
         self.set_child(vbox)
 
-        self.pulse_sel = PulseSelector(search="KATANA")
+        self.pulse_sel = PulseSelector(search="")
         self.pulse_sel.connect("notify::device", self.on_device_changed)
         vbox.append(self.pulse_sel)
 

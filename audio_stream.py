@@ -73,7 +73,7 @@ class AudioStream:
 # ----------Test Part -----------------
 if __name__ == "__main__":
     loop = GLib.MainLoop()
-    stream = AudioStream(device="alsa_input.usb-BOSS_KATANA-01.HiFi__Line4__source")
+    stream = AudioStream(device="")
     stream.start()
 
     try:

@@ -66,7 +66,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self.set_title("App Test")
         self.set_default_size(300, 100)
 
-        self.pulse_sel = PulseSelector("KATANA")
+        self.pulse_sel = PulseSelector("")
         self.set_child(self.pulse_sel)
 
 if __name__ == "__main__":
