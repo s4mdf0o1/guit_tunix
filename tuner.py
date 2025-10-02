@@ -14,7 +14,7 @@ class Tuner:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.name = self.__class__.__name__
-        with open("target_freqs.yaml", "r") as f:
+        with open("config.yaml", "r") as f:
             self.cfg = yaml.load(f) 
         self.buffer = np.zeros(self.cfg['WIN_SIZE'], dtype='float32')
         self.buf_lock = threading.Lock()
